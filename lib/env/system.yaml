@@ -13,19 +13,19 @@ env:
             type: str
 
         diskfree:
-            name: Freier Speicher des Laufwerks auf dem Smarthome.py derzeit läuft
+            name: Freier Speicher des Laufwerks auf dem Smarthome.py derzeit lauft
             type: num
 
         disksize:
-            name: Größe des Laufwerks auf dem Smarthome.py derzeit läuft
+            name: Groesse des Laufwerks auf dem Smarthome.py derzeit lauft
             type: num
 
         diskusage:
-            name: Genutzte Größe des Laufwerks auf dem Smarthome.py derzeit läuft
+            name: Genutzte Groesse des Laufwerks auf dem Smarthome.py derzeit lauft
             type: num
 
         diskusagepercent:
-            name: Genutzte Größe des Laufwerks auf dem Smarthome.py derzeit läuft in Prozent der Gesamtgröße
+            name: Genutzte Groesse des Laufwerks auf dem Smarthome.py derzeit lauft in Prozent der Gesamtgroesse
             type: num
 
         libs:
