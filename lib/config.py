@@ -41,6 +41,9 @@ valid_attr_chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567
 digits = '0123456789'
 reserved = ['set', 'get']
 
+REMOVE_ATTR = 'attr'
+REMOVE_PATH = 'path'
+
 def parse_basename(basename, configtype=''):
     '''
     Load and parse a single configuration and merge it to the configuration tree
@@ -61,7 +64,8 @@ def parse_basename(basename, configtype=''):
     if config == {}:
         config = parse(basename+CONF_FILE)
     if config == {}:
-        logger.critical("No file '{}.*' found with {} configuration".format(basename, configtype))
+        if not (configtype == 'logics'):
+            logger.critical("No file '{}.*' found with {} configuration".format(basename, configtype))
     return config
         
 
@@ -83,11 +87,14 @@ def parse_itemsdir(itemsdir, item_conf):
     '''
     for item_file in sorted(os.listdir(itemsdir)):
         if item_file.endswith(CONF_FILE) or item_file.endswith(YAML_FILE):
-            try:
-                item_conf = parse(itemsdir + item_file, item_conf)
-            except Exception as e:
-                logger.exception("Problem reading {0}: {1}".format(item_file, e))
-                continue
+            if item_file == 'logic'+YAML_FILE and itemsdir.find('lib/env/') > -1:
+                logger.info("config.parse_itemsdir: skipping logic definition file = {}".format( itemsdir+item_file ))
+            else:
+                try:
+                    item_conf = parse(itemsdir + item_file, item_conf)
+                except Exception as e:
+                    logger.exception("Problem reading {0}: {1}".format(item_file, e))
+                    continue
     return item_conf
 
 
@@ -114,7 +121,7 @@ def parse(filename, config=None):
 
 # --------------------------------------------------------------------------------------
 
-def remove_keys(ydata, func, level=0):
+def remove_keys(ydata, func, remove=[REMOVE_ATTR], level=0, msg=None, key_prefix=''):
     '''
     Removes given keys from a dict or OrderedDict structure
 
@@ -129,13 +136,20 @@ def remove_keys(ydata, func, level=0):
     try:
         level_keys = list(ydata.keys())
         for key in level_keys:
-            if type(ydata[key]).__name__ in ['dict','OrderedDict']:
-                remove_keys(ydata[key], func, level+1)
+            key_str = str(key)
+            key_dict = type(ydata[key]).__name__ in ['dict','OrderedDict']
+            if  not key_dict:
+                key_remove = REMOVE_ATTR in remove and func(key_str)
             else:
-                if func(str(key)):
-                    ydata.pop(key)
-    except:
-        logger.error("Problem removing key from '{}', probably invalid YAML file".format(str(ydata)))
+                key_remove = REMOVE_PATH in remove and func(key_str)
+            if key_remove:
+                if msg:
+                    logger.warn(msg.format(key_prefix+key_str))
+                ydata.pop(key)
+            elif key_dict:
+                remove_keys(ydata[key], func, remove, level+1, msg, key_prefix+key_str+'.')
+    except Exception as e:
+        logger.error("Problem removing key from '{}', probably invalid YAML file: {}".format(str(ydata), e))
 
 
 
@@ -147,7 +161,7 @@ def remove_comments(ydata):
     :type ydata: OrderedDict
     
     '''
-    remove_keys(ydata, lambda k: k.startswith('comment'))
+    remove_keys(ydata, lambda k: k.startswith('comment'), [REMOVE_ATTR])
 
 
 def remove_digits(ydata):
@@ -158,7 +172,7 @@ def remove_digits(ydata):
     :type ydata: OrderedDict
 
     '''
-    remove_keys(ydata, lambda k: k[0] in digits)
+    remove_keys(ydata, lambda k: k[0] in digits, [REMOVE_ATTR, REMOVE_PATH], msg="Problem parsing '{}': item starts with digits")
 
 
 def remove_reserved(ydata):
@@ -169,7 +183,7 @@ def remove_reserved(ydata):
     :type ydata: OrderedDict
 
     '''
-    remove_keys(ydata, lambda k: k in reserved)
+    remove_keys(ydata, lambda k: k in reserved, [REMOVE_PATH], msg="Problem parsing '{}': item using reserved word set/get")
 
 
 def remove_keyword(ydata):
@@ -180,7 +194,7 @@ def remove_keyword(ydata):
     :type ydata: OrderedDict
 
     '''
-    remove_keys(ydata, lambda k: keyword.iskeyword(k))
+    remove_keys(ydata, lambda k: keyword.iskeyword(k), [REMOVE_PATH], msg="Problem parsing '{}': item using reserved Python keyword")
 
 
 def remove_invalid(ydata):
@@ -192,7 +206,7 @@ def remove_invalid(ydata):
 
     '''
     valid_chars = valid_item_chars + valid_attr_chars
-    remove_keys(ydata, lambda k: True if True in [True for i in range(len(k)) if k[i] not in valid_chars] else False)
+    remove_keys(ydata, lambda k: True if True in [True for i in range(len(k)) if k[i] not in valid_chars] else False, [REMOVE_ATTR, REMOVE_PATH], msg="Problem parsing '{}' invalid character. Valid characters are: " + str(valid_chars))
 
 
 def merge(source, destination):
@@ -437,9 +451,9 @@ def parse_conf(filename, config=None):
                 if len(attr) > 0:
                     if attr[0] in digits:
                         logger.error("Problem parsing '{}' attrib starts with a digit '{}' in line {}: {}.".format(filename, attr[0], linenu, attr ))
+                        continue
                 if '|' in value:
                     item[attr] = [strip_quotes(x) for x in value.split('|')]
                 else:
                     item[attr] = strip_quotes(value)
         return config
-
